@@ -10,11 +10,17 @@ const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 // Telegram Bot Token
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-// Initialize Telegram bot
-const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
+// Initialize Telegram bot (using webhook)
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN);
 
 // Variable to store Spotify access token
 let spotifyAccessToken = "";
+
+// Define your webhook URL (Vercel's deployment URL)
+const WEBHOOK_URL = "https://spotify-playlist-bot.vercel.app/"; // Replace with your Vercel URL
+
+// Set the webhook for the bot to use
+bot.setWebHook(`${WEBHOOK_URL}${TELEGRAM_BOT_TOKEN}`);
 
 // Function to fetch Spotify Access Token
 async function fetchSpotifyToken() {
@@ -66,27 +72,25 @@ async function getPlaylistSongs(playlistId) {
   }
 }
 
-// Handle /start command
-bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(
-    msg.chat.id,
-    "Welcome! Send me a Spotify playlist link, and I'll fetch the song names for you."
-  );
-});
+// Webhook request handler
+const express = require("express");
+const app = express();
+app.use(express.json());
 
-// Handle messages (Spotify playlist links)
-bot.on("message", async (msg) => {
+// Handle incoming updates (messages, commands)
+app.post(`/`, async (req, res) => {
+  const msg = req.body;
   const chatId = msg.chat.id;
   const text = msg.text;
 
   // Check if the message contains a Spotify playlist link
   const match = text.match(/playlist\/([a-zA-Z0-9]+)/);
   if (!match) {
-    bot.sendMessage(
+    await bot.sendMessage(
       chatId,
       "Please send a valid Spotify playlist link. Example: https://open.spotify.com/playlist/{playlist_id}"
     );
-    return;
+    return res.send("ok");
   }
 
   const playlistId = match[1];
@@ -99,8 +103,16 @@ bot.on("message", async (msg) => {
 
   // Send the song names back to the user
   if (songs.length > 0) {
-    bot.sendMessage(chatId, "Here are the songs in your playlist:\n\n" + songs.join("\n"));
+    await bot.sendMessage(chatId, "Here are the songs in your playlist:\n\n" + songs.join("\n"));
   } else {
-    bot.sendMessage(chatId, "Could not fetch songs from the playlist. Please try again.");
+    await bot.sendMessage(chatId, "Could not fetch songs from the playlist. Please try again.");
   }
+
+  res.send("ok");
+});
+
+// Start the server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
